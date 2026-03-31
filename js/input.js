@@ -1,11 +1,9 @@
 // ============================================================
 // input.js — 入力管理（キーボード・タッチジョイスティック）
-// moveX/moveY に -1〜1 の値を入れる。game.js の loop() が参照する
 // ============================================================
 
 let moveX = 0, moveY = 0;
 
-// ─── タッチジョイスティック ───────────────────────────────────
 const pad  = document.getElementById('stick-pad');
 const knob = document.getElementById('stick-knob');
 let stickId = -1;
@@ -18,7 +16,7 @@ function updStick(cx, cy) {
   const dist = Math.hypot(dx, dy);
   const ang  = Math.atan2(dy, dx);
   const cl   = Math.min(dist, maxR);
-  knob.style.transform = `translate(calc(-50% + ${Math.cos(ang) * cl}px), calc(-50% + ${Math.sin(ang) * cl}px))`;
+  knob.style.transform = `translate(calc(-50% + ${Math.cos(ang)*cl}px), calc(-50% + ${Math.sin(ang)*cl}px))`;
   moveX = Math.cos(ang) * (Math.min(dist, maxR) / maxR);
   moveY = Math.sin(ang) * (Math.min(dist, maxR) / maxR);
 }
@@ -31,9 +29,7 @@ pad.addEventListener('touchstart', e => {
 }, { passive: false });
 
 document.addEventListener('touchmove', e => {
-  for (let t of e.changedTouches) {
-    if (t.identifier === stickId) updStick(t.clientX, t.clientY);
-  }
+  for (let t of e.changedTouches) { if (t.identifier === stickId) updStick(t.clientX, t.clientY); }
 }, { passive: true });
 
 document.addEventListener('touchend', e => {
@@ -45,23 +41,19 @@ document.addEventListener('touchend', e => {
   }
 }, { passive: true });
 
-// ─── キーボード ───────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft'  || e.key === 'a') moveX = -1;
   if (e.key === 'ArrowRight' || e.key === 'd') moveX =  1;
   if (e.key === 'ArrowUp'    || e.key === 'w') moveY = -1;
   if (e.key === 'ArrowDown'  || e.key === 's') moveY =  1;
-  if (e.key === '1') setWeapon(0);
-  if (e.key === '2') setWeapon(1);
-  if (e.key === '3') setWeapon(2);
+  // Tab/Q: スロット入れ替え
+  if (e.key === 'Tab' || e.key === 'q' || e.key === 'Q') { e.preventDefault(); swapSlots(); }
   if (e.key === 'Escape') closeShop();
 });
 
 document.addEventListener('keyup', e => {
-  if (e.key === 'ArrowLeft'  || e.key === 'a' ||
-      e.key === 'ArrowRight' || e.key === 'd') moveX = 0;
-  if (e.key === 'ArrowUp'    || e.key === 'w' ||
-      e.key === 'ArrowDown'  || e.key === 's') moveY = 0;
+  if (e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'ArrowRight' || e.key === 'd') moveX = 0;
+  if (e.key === 'ArrowUp'    || e.key === 'w' || e.key === 'ArrowDown'  || e.key === 's') moveY = 0;
 });
 
 window.addEventListener('resize', () => { if (gameRunning) resize(); });

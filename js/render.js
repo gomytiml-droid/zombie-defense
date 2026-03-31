@@ -1,10 +1,7 @@
 // ============================================================
 // render.js — 描画システム（カメラ・マップ・UI・エフェクト）
-// canvas 2D APIを使い、毎フレーム全オブジェクトを描画する
 // ============================================================
 
-// ─── カメラ追従 ───────────────────────────────────────────────
-// プレイヤーが画面の1/3より端に近づいたらカメラを動かす
 function updateCamera() {
   const marginX = VW / 3, marginY = VH / 3;
   const px = player.x - camX, py = player.y - camY;
@@ -16,13 +13,12 @@ function updateCamera() {
   camY = Math.max(0, Math.min(MAP_H - VH, camY));
 }
 
-// ─── メイン描画 ───────────────────────────────────────────────
 function draw() {
   ctx.clearRect(0, 0, VW, VH);
   ctx.save();
   ctx.translate(-camX, -camY);
 
-  // マップ背景（建物外: 暗い）
+  // マップ背景
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, MAP_W, MAP_H);
 
@@ -37,13 +33,33 @@ function draw() {
     ctx.fillText(r.label, r.x + r.w/2, r.y + r.h/2);
   });
 
-  // 内壁（扉付き）
+  // 内壁
   ctx.fillStyle = '#252018';
   INNER_WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
 
   // 外壁
   ctx.fillStyle = '#2c2820';
   OUTER_WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+  // 鍵付きドア（未解錠）
+  LOCKED_ROOMS.forEach(room => {
+    if (lockedRoomState[room.id]) return;
+    const d = room.door;
+    ctx.fillStyle = '#5a3a00';
+    ctx.fillRect(d.x, d.y, d.w, d.h);
+    ctx.strokeStyle = '#EF9F27'; ctx.lineWidth = 2;
+    ctx.strokeRect(d.x, d.y, d.w, d.h);
+    ctx.fillStyle = '#EF9F27'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('KEY', d.x + d.w/2, d.y + d.h/2 + 4);
+    // 近接ヒント
+    const cx = d.x + d.w/2, cy = d.y + d.h/2;
+    if (playerKeys > 0 && Math.hypot(cx - player.x, cy - player.y) < 120) {
+      ctx.fillStyle = 'rgba(239,159,39,0.18)';
+      ctx.beginPath(); ctx.arc(cx, cy, 50, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#EF9F27'; ctx.font = '9px sans-serif';
+      ctx.fillText('近づくと解錠', cx, cy + d.h/2 + 14);
+    }
+  });
 
   // 窓（壁の上に描画）
   windows.forEach(w => {
@@ -52,24 +68,51 @@ function draw() {
     ctx.fillRect(w.x-8, w.y-8, 16, 16);
     ctx.strokeStyle = w.open ? '#8b0000' : '#555'; ctx.lineWidth = 1;
     ctx.strokeRect(w.x-8, w.y-8, 16, 16);
-    // HP バー
     if (!w.open && w.hp < w.maxHp) {
       ctx.fillStyle = '#111'; ctx.fillRect(w.x-6, w.y+4, 12, 3);
       ctx.fillStyle = pct > 0.5 ? '#63c422' : '#e24b4a';
       ctx.fillRect(w.x-6, w.y+4, 12*pct, 3);
     }
-    // 開口部の赤いオーラ
     if (w.open) {
       ctx.fillStyle = 'rgba(200,0,0,0.2)';
       ctx.beginPath(); ctx.arc(w.x, w.y, 25, 0, Math.PI*2); ctx.fill();
     }
-    // 修理進捗アーク
     if (repairing && repairTarget === w) {
       ctx.strokeStyle = '#63c422'; ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(w.x, w.y, 14, -Math.PI/2, -Math.PI/2 + Math.PI*2*(repairTimer/180));
       ctx.stroke();
     }
+  });
+
+  // 床アイテム
+  floorItems.forEach(fi => {
+    const locked = fi.roomId && !lockedRoomState[fi.roomId];
+    ctx.globalAlpha = locked ? 0.35 : 1;
+    // グロー
+    ctx.fillStyle = fi.item.type === 'melee' ? '#A0522D' : '#FAC775';
+    ctx.beginPath(); ctx.arc(fi.x, fi.y, 13, 0, Math.PI*2); ctx.fill();
+    // アイコン背景
+    ctx.fillStyle = '#1c1c1c';
+    ctx.beginPath(); ctx.arc(fi.x, fi.y, 10, 0, Math.PI*2); ctx.fill();
+    // テキスト
+    ctx.fillStyle = fi.item.type === 'melee' ? '#D2691E' : '#FAC775';
+    ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(fi.item.name, fi.x, fi.y + 3);
+    ctx.globalAlpha = 1;
+    // 拾えるなら光るリング
+    if (!locked && Math.hypot(fi.x - player.x, fi.y - player.y) < 35) {
+      ctx.strokeStyle = '#63c422'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(fi.x, fi.y, 15, 0, Math.PI*2); ctx.stroke();
+    }
+  });
+
+  // 落ちた鍵
+  droppedKeys.forEach(k => {
+    ctx.fillStyle = '#EF9F27';
+    ctx.beginPath(); ctx.arc(k.x, k.y, 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('KEY', k.x, k.y + 3);
   });
 
   // コイン
@@ -88,13 +131,11 @@ function draw() {
   });
   ctx.globalAlpha = 1;
 
-  // ゾンビ（スプライト優先、なければ丸フォールバック）
+  // ゾンビ
   zombies.forEach(z => {
     const size = z.r * 2.8;
-    const src  = zombieSpriteCanvas || zombieSpriteImg; // どちらか使えるほうを使う
-
+    const src  = zombieSpriteCanvas || zombieSpriteImg;
     if (src) {
-      // 移動方向に応じて 4 方向スプライトを切り替える
       let sp;
       if (z.angle !== undefined) {
         const a = ((z.angle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
@@ -102,42 +143,19 @@ function draw() {
         else if (a < Math.PI*0.75)                       sp = SPRITE.front;
         else if (a < Math.PI*1.25)                       sp = SPRITE.left;
         else                                             sp = SPRITE.back;
-      } else {
-        sp = SPRITE.front;
-      }
+      } else { sp = SPRITE.front; }
 
-      if (zombieSpriteImg && !zombieSpriteCanvas) {
-        // file:// フォールバック: multiply で白を暗くしてなじませる
-        ctx.globalCompositeOperation = 'multiply';
-      }
-      ctx.drawImage(src, sp.sx, sp.sy, sp.sw, sp.sh,
-                    z.x - size/2, z.y - size/2, size, size);
+      if (zombieSpriteImg && !zombieSpriteCanvas) ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(src, sp.sx, sp.sy, sp.sw, sp.sh, z.x-size/2, z.y-size/2, size, size);
       ctx.globalCompositeOperation = 'source-over';
 
-      // タイプ別オーラ
-      if (z.type === 2) {
-        ctx.globalAlpha = 0.25; ctx.fillStyle = '#ff2222';
-        ctx.beginPath(); ctx.arc(z.x, z.y, z.r + 2, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-      if (z.type === 1) {
-        ctx.globalAlpha = 0.20; ctx.fillStyle = '#ffee00';
-        ctx.beginPath(); ctx.arc(z.x, z.y, z.r + 1, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1;
-      }
+      if (z.type === 2) { ctx.globalAlpha = 0.25; ctx.fillStyle = '#ff2222'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r+2, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }
+      if (z.type === 1) { ctx.globalAlpha = 0.20; ctx.fillStyle = '#ffee00'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r+1, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }
     } else {
-      // スプライト未ロード: 丸で描画
-      ctx.fillStyle = z.body;
-      ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = z.head;
-      ctx.beginPath(); ctx.arc(z.x, z.y - z.r*0.3, z.r*0.65, 0, Math.PI*2); ctx.fill();
-      if (z.label) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.font = `bold ${z.r}px sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText(z.label, z.x, z.y + z.r*0.35);
-      }
+      ctx.fillStyle = z.body; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = z.head; ctx.beginPath(); ctx.arc(z.x, z.y-z.r*0.3, z.r*0.65, 0, Math.PI*2); ctx.fill();
+      if (z.label) { ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.font=`bold ${z.r}px sans-serif`; ctx.textAlign='center'; ctx.fillText(z.label, z.x, z.y+z.r*0.35); }
     }
-    // HP バー（共通）
     ctx.fillStyle = '#111'; ctx.fillRect(z.x-z.r, z.y-z.r-7, z.r*2, 4);
     ctx.fillStyle = z.hp/z.maxHp > 0.5 ? '#63c422' : '#e24b4a';
     ctx.fillRect(z.x-z.r, z.y-z.r-7, z.r*2*(z.hp/z.maxHp), 4);
@@ -149,16 +167,30 @@ function draw() {
     ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
   });
 
-  // プレイヤー（青い同心円）
+  // 近接スイングアーク
+  if (meleeAnim) {
+    ctx.globalAlpha = (meleeAnim.timer / meleeAnim.maxTimer) * 0.6;
+    ctx.fillStyle = meleeAnim.color;
+    ctx.beginPath();
+    ctx.moveTo(meleeAnim.x, meleeAnim.y);
+    ctx.arc(meleeAnim.x, meleeAnim.y, meleeAnim.range,
+            meleeAnim.angle - meleeAnim.arc/2, meleeAnim.angle + meleeAnim.arc/2);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // プレイヤー
   ctx.fillStyle = '#1a4a7a'; ctx.beginPath(); ctx.arc(player.x, player.y, player.r,   0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#378add'; ctx.beginPath(); ctx.arc(player.x, player.y, player.r-3, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#85B7EB'; ctx.beginPath(); ctx.arc(player.x, player.y, 5,           0, Math.PI*2); ctx.fill();
 
-  // 射程サークル
-  const wp = WEAPONS[currentWeapon];
-  const range = (wp.range + wp.upgRange*20) * 1.5;
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(player.x, player.y, range, 0, Math.PI*2); ctx.stroke();
+  // 射程サークル（銃の時のみ）
+  const activeWp = getActiveWeapon();
+  if (activeWp) {
+    const range = (activeWp.range + activeWp.upgRange*20) * 1.5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(player.x, player.y, range, 0, Math.PI*2); ctx.stroke();
+  }
 
   // フロートテキスト
   floatTexts.forEach(f => {
@@ -170,11 +202,18 @@ function draw() {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // ─── ミニマップ（スクリーン固定）──────────────────────────
+  // ─── ミニマップ ─────────────────────────────────────────────
   const MM = 60, MX = VW-MM-6, MY = VH-MM-6;
   const sx = MM/MAP_W, sy = MM/MAP_H;
   ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(MX, MY, MM, MM);
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.strokeRect(MX, MY, MM, MM);
+  // 鍵ドア
+  LOCKED_ROOMS.forEach(room => {
+    if (lockedRoomState[room.id]) return;
+    const d = room.door;
+    ctx.fillStyle = '#EF9F27';
+    ctx.fillRect(MX+d.x*sx-1, MY+d.y*sy-1, 4, 4);
+  });
   windows.forEach(w => {
     ctx.fillStyle = w.open ? '#8b0000' : '#378add';
     ctx.fillRect(MX+w.x*sx-1, MY+w.y*sy-1, 3, 3);
@@ -186,7 +225,7 @@ function draw() {
   ctx.fillStyle = '#378add';
   ctx.beginPath(); ctx.arc(MX+player.x*sx, MY+player.y*sy, 2, 0, Math.PI*2); ctx.fill();
 
-  // ─── ウェーブクリアバナー ──────────────────────────────────
+  // ─── ウェーブクリアバナー ────────────────────────────────────
   if (waveClearAnim > 0) {
     const total = 200;
     let a = waveClearAnim > total-25 ? (total-waveClearAnim)/25 : waveClearAnim < 35 ? waveClearAnim/35 : 1;

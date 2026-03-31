@@ -88,3 +88,36 @@ const INNER_WALLS = [
   // x:600-640 (ダイニング|バスルーム) 扉: y:560-600
   {x:600,y:500,w:40,h:60},{x:600,y:600,w:40,h:60},
 ];
+
+// ─── 近接武器マスター ─────────────────────────────────────────
+// damage: ダメージ  range: 当たり判定半径px  arc: 扇の角度rad
+const MELEE_WEAPONS = [
+  { id:'nail_bat', name:'釘バット', damage:95, range:65, arc:Math.PI*0.75, cooldown:850, color:'#A0522D' },
+  { id:'katana',   name:'刀',      damage:60, range:85, arc:Math.PI*1.20, cooldown:350, color:'#B8C8D8' },
+];
+
+// ─── 鍵付き部屋定義 ───────────────────────────────────────────
+// door: 入口ギャップを塞ぐ衝突矩形（解錠で削除される）
+const LOCKED_ROOMS = [
+  {
+    id:'study', label:'書斎',
+    door:    { x:220, y:340, w:40, h:40 },
+    lootPos: { x:144, y:360 },
+    loot:    { type:'melee', meleeIdx:0, name:'釘バット' },
+  },
+  {
+    id:'bathroom', label:'バスルーム',
+    door:    { x:600, y:560, w:40, h:40 },
+    lootPos: { x:740, y:580 },
+    loot:    { type:'gun', weaponIdx:1, name:'ショットガン' },
+  },
+  {
+    id:'wc', label:'WC',
+    door:    { x:700, y:340, w:40, h:40 },
+    lootPos: { x:790, y:360 },
+    loot:    { type:'melee', meleeIdx:1, name:'刀' },
+  },
+];
+
+// 廊下に落ちているマシンガン（鍵不要）
+const HALLWAY_ITEM = { x:390, y:355, item:{ type:'gun', weaponIdx:2, name:'マシンガン' }, roomId:null };

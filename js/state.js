@@ -85,3 +85,20 @@ const SPRITE = {
   img.onerror = () => console.warn('zombie_sprite.jpg を読み込めませんでした');
   img.src = 'images/zombie_sprite.jpg';
 })();
+
+// ─── アイテムスロット（メイン・サブ）──────────────────────────
+// 各スロット: { type:'gun'|'melee', weaponIdx?:, meleeIdx?:, name: } | null
+let itemSlots  = [{ type:'gun', weaponIdx:0, name:'ハンドガン' }, null];
+let activeSlot = 0;
+
+// ─── 床アイテム・鍵 ───────────────────────────────────────────
+let floorItems  = [];  // { x, y, item, roomId }
+let droppedKeys = [];  // { x, y } — ゾンビドロップ鍵
+let playerKeys  = 0;
+
+// ─── 鍵付き部屋の解錠状態 ─────────────────────────────────────
+let lockedRoomState = {};  // { study:false, bathroom:false, wc:false }
+
+// ─── 近接攻撃アニメーション ───────────────────────────────────
+let meleeAnim     = null;  // { x,y,angle,range,arc,timer,maxTimer,color }
+let nextMeleeTime = 0;

@@ -15,6 +15,7 @@
       <div class="hud-b"><div class="hud-l">SCORE</div><div class="hud-v" id="hScore">0</div></div>
       <div class="hud-b"><div class="hud-l">KILLS</div><div class="hud-v" id="hKills">0</div></div>
       <div class="hud-b"><div class="hud-l">MONEY</div><div class="hud-v" id="hMoney" style="color:#EF9F27">$0</div></div>
+      <div class="hud-b"><div class="hud-l">KEY</div><div class="hud-v" id="hKey" style="color:#EF9F27">0</div></div>
     </div>
     <div id="canvas-wrap">
       <canvas id="c"></canvas>
@@ -25,10 +26,11 @@
       </div>
     </div>
     <div id="bottom">
-      <div id="weapon-bar">
-        <div class="wbtn active" onclick="setWeapon(0)" id="w0">ピストル<br><span style="font-size:9px">連射/低</span></div>
-        <div class="wbtn" onclick="setWeapon(1)" id="w1">ショットガン<br><span style="font-size:9px">広/遅</span></div>
-        <div class="wbtn" onclick="setWeapon(2)" id="w2">マシンガン<br><span style="font-size:9px">連射/中</span></div>
+      <!-- アイテムスロット（メイン・サブ） -->
+      <div id="item-slots">
+        <div class="item-slot active-slot" id="item-slot-0">ハンドガン</div>
+        <div class="swap-btn" onclick="swapSlots()">⇆ SWAP<br><span style="font-size:8px">Tab / Q</span></div>
+        <div class="item-slot" id="item-slot-1">---</div>
       </div>
       <div id="action-bar">
         <div class="abtn" id="repairBtn">窓修理<br><span style="font-size:9px">窓に近づくと自動</span></div>
@@ -36,12 +38,15 @@
       </div>
       <div id="controls">
         <div id="stick-pad"><div id="stick-knob"></div></div>
-        <div style="font-size:10px;color:#444;text-align:right">移動: スティック / WASD<br>窓に近づくと自動修理 ($20)</div>
+        <div style="font-size:10px;color:#444;text-align:right">
+          移動: スティック / WASD<br>
+          SWAP: Tab / Q<br>
+          鍵: ゾンビが落とす
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Shop panel: to the right of the game -->
   <div id="shop-panel">
     <div class="shop-title">ショップ</div>
     <div id="shop-items"></div>
@@ -55,6 +60,7 @@
 <script src="js/entities.js"></script>
 <script src="js/render.js"></script>
 <script src="js/shop.js"></script>
+<script src="js/items.js"></script>
 <script src="js/input.js"></script>
 <script src="js/game.js"></script>
 </body>
