@@ -88,17 +88,53 @@ function draw() {
   });
   ctx.globalAlpha = 1;
 
-  // ゾンビ（種別ごとに色が違う）
+  // ゾンビ（スプライトが読み込まれていればスプライト、なければ丸で描画）
   zombies.forEach(z => {
-    ctx.fillStyle = z.body;
-    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = z.head;
-    ctx.beginPath(); ctx.arc(z.x, z.y - z.r*0.3, z.r*0.65, 0, Math.PI*2); ctx.fill();
-    if (z.label) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.font = `bold ${z.r}px sans-serif`; ctx.textAlign = 'center';
-      ctx.fillText(z.label, z.x, z.y + z.r*0.35);
+    const size = z.r * 2.8;
+    if (zombieSpriteCanvas) {
+      // 移動方向に応じて 4 方向スプライトを切り替える
+      let sp;
+      if (z.angle !== undefined) {
+        const a = ((z.angle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+        if      (a < Math.PI*0.25 || a >= Math.PI*1.75) sp = SPRITE.right;
+        else if (a < Math.PI*0.75)                       sp = SPRITE.front; // 下向き→FRONT
+        else if (a < Math.PI*1.25)                       sp = SPRITE.left;
+        else                                             sp = SPRITE.back;
+      } else {
+        sp = SPRITE.front;
+      }
+      ctx.drawImage(
+        zombieSpriteCanvas,
+        sp.sx, sp.sy, sp.sw, sp.sh,
+        z.x - size/2, z.y - size/2, size, size
+      );
+      // タフゾンビ: 赤いオーラで強調
+      if (z.type === 2) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = '#ff2222';
+        ctx.beginPath(); ctx.arc(z.x, z.y, z.r + 2, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // 速ゾンビ: 黄色オーラ
+      if (z.type === 1) {
+        ctx.globalAlpha = 0.20;
+        ctx.fillStyle = '#ffee00';
+        ctx.beginPath(); ctx.arc(z.x, z.y, z.r + 1, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      // フォールバック: 円で描画
+      ctx.fillStyle = z.body;
+      ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = z.head;
+      ctx.beginPath(); ctx.arc(z.x, z.y - z.r*0.3, z.r*0.65, 0, Math.PI*2); ctx.fill();
+      if (z.label) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.font = `bold ${z.r}px sans-serif`; ctx.textAlign = 'center';
+        ctx.fillText(z.label, z.x, z.y + z.r*0.35);
+      }
     }
+    // HP バー（スプライト・フォールバック共通）
     ctx.fillStyle = '#111'; ctx.fillRect(z.x-z.r, z.y-z.r-7, z.r*2, 4);
     ctx.fillStyle = z.hp/z.maxHp > 0.5 ? '#63c422' : '#e24b4a';
     ctx.fillRect(z.x-z.r, z.y-z.r-7, z.r*2*(z.hp/z.maxHp), 4);

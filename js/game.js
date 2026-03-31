@@ -148,6 +148,7 @@ function loop() {
   // ゾンビ移動 + 壁衝突 + プレイヤー攻撃
   zombies.forEach(z => {
     const ang = Math.atan2(player.y - z.y, player.x - z.x);
+    z.angle = ang; // スプライト方向切替のために保存
     z.x += Math.cos(ang) * z.speed;
     z.y += Math.sin(ang) * z.speed;
     z.x = Math.max(z.r, Math.min(MAP_W - z.r, z.x));
