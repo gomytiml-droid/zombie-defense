@@ -1,0 +1,69 @@
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;}
+body{font-family:var(--font-sans);background:#0d0d0d;}
+
+/* Outer wrapper: game on left, shop on right */
+#outer-wrap{
+  display:flex;
+  flex-direction:row;
+  align-items:flex-start;
+  justify-content:center;
+  min-height:100vh;
+}
+
+#wrap{
+  width:100%;
+  max-width:480px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* HUD */
+#hud{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#111;border-bottom:1px solid #333;flex-wrap:wrap;gap:4px;}
+.hud-b{text-align:center;min-width:48px;}
+.hud-l{font-size:9px;color:#666;text-transform:uppercase;}
+.hud-v{font-size:14px;font-weight:500;color:#eee;}
+
+/* Canvas */
+#canvas-wrap{position:relative;width:100%;}
+canvas{display:block;width:100%;touch-action:none;background:#111;}
+
+/* Game over overlay */
+#overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.75);align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:10;}
+#overlay.show{display:flex;}
+.ov-title{font-size:26px;font-weight:500;color:#fff;}
+.ov-sub{font-size:13px;color:#aaa;text-align:center;}
+.ov-btn{padding:9px 24px;border-radius:6px;border:none;background:#e24b4a;color:#fff;font-size:14px;cursor:pointer;}
+
+/* Bottom UI */
+#bottom{display:flex;flex-direction:column;background:#111;border-top:1px solid #333;}
+#weapon-bar{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #222;}
+.wbtn{flex:1;padding:5px 2px;border-radius:5px;border:1px solid #333;background:#1a1a1a;font-size:10px;color:#888;cursor:pointer;text-align:center;transition:all .15s;}
+.wbtn.active{border-color:#378add;background:#0c3a5a;color:#85B7EB;}
+#action-bar{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #222;}
+.abtn{flex:1;padding:6px 4px;border-radius:5px;border:1px solid #333;background:#1a1a1a;font-size:10px;color:#888;cursor:pointer;text-align:center;}
+.abtn.active{border-color:#EF9F27;background:#3a2800;color:#EF9F27;}
+#controls{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;height:96px;}
+#stick-pad{width:72px;height:72px;border-radius:50%;border:1px solid #333;background:#161616;position:relative;flex-shrink:0;}
+#stick-knob{width:28px;height:28px;border-radius:50%;background:#444;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);transition:transform .05s;}
+
+/* Shop panel — appears to the right of the game */
+#shop-panel{
+  display:none;
+  width:210px;
+  flex-shrink:0;
+  background:#0f0f0f;
+  border-left:1px solid #333;
+  flex-direction:column;
+  padding:12px 10px;
+  gap:8px;
+  overflow-y:auto;
+  align-self:stretch;
+}
+#shop-panel.show{display:flex;}
+.shop-title{font-size:15px;font-weight:500;color:#fff;margin-bottom:2px;border-bottom:1px solid #333;padding-bottom:6px;}
+.shop-item{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;}
+.shop-info{font-size:11px;color:#ccc;}
+.shop-info b{color:#fff;font-size:12px;display:block;margin-bottom:2px;}
+.shop-btn{padding:5px 8px;border-radius:5px;border:none;background:#EF9F27;color:#000;font-size:11px;font-weight:500;cursor:pointer;width:100%;}
+.shop-btn:disabled{background:#2a2a2a;color:#555;cursor:default;}
