@@ -64,7 +64,17 @@ function spawnZombie() {
     type, body: cfg.body, head: cfg.head,
     scoreMul: cfg.scoreMul, coinMul: cfg.coinMul, label: cfg.label,
     attacking: false,
+    seed: Math.random() * 100,       // [TASK-03] ジグザグ用シード値
+    windowTarget: null,              // [TASK-03] 重ゾンビの窓ターゲット
   });
+  // [TASK-03] 重ゾンビは最寄りの閉じた窓を優先ターゲットにする
+  if (type === 2) {
+    const closedWins = windows.filter(w => !w.open);
+    if (closedWins.length) {
+      const tw = closedWins[Math.floor(Math.random() * closedWins.length)];
+      zombies[zombies.length - 1].windowTarget = tw;
+    }
+  }
 }
 
 // ─── 自動照準・発射（アクティブスロットが銃の時だけ）───────────

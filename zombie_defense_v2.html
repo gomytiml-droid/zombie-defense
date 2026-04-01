@@ -46,13 +46,18 @@
       </div>
     </div>
   </div>
+</div><!-- /#outer-wrap ここで閉じる -->
 
-  <div id="shop-panel">
+<!-- [TASK-10] ショップをfixedオーバーレイに変更 -->
+<div id="shop-panel">
+  <div class="shop-header">
     <div class="shop-title">ショップ</div>
-    <div id="shop-items"></div>
-    <button class="ov-btn" style="margin-top:8px;width:100%" onclick="closeShop()">閉じる</button>
+    <button class="shop-close-btn" onclick="closeShop()">✕</button>
   </div>
+  <div id="shop-items"></div>
 </div>
+
+<script src="js/weapons.js"></script>
 <script src="js/constants.js"></script>
 <script src="js/state.js"></script>
 <script src="js/audio.js"></script>
@@ -61,6 +66,7 @@
 <script src="js/render.js"></script>
 <script src="js/shop.js"></script>
 <script src="js/items.js"></script>
+<script src="js/npc.js"></script>
 <script src="js/input.js"></script>
 <script src="js/game.js"></script>
 </body>

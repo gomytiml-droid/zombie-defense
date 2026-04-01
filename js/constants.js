@@ -5,13 +5,6 @@
 
 const MAP_W = 900, MAP_H = 700;
 
-// ─── 武器マスター ─────────────────────────────────────────────
-const WEAPONS = [
-  {name:'ピストル',   fireRate:500,  damage:25, range:160, spread:0.05, bullets:1, color:'#FAC775', upgDmg:0, upgRate:0, upgRange:0},
-  {name:'ショットガン',fireRate:1100, damage:18, range:110, spread:0.45, bullets:5, color:'#F0997B', upgDmg:0, upgRate:0, upgRange:0},
-  {name:'マシンガン', fireRate:120,  damage:10, range:130, spread:0.18, bullets:1, color:'#9FE1CB', upgDmg:0, upgRate:0, upgRange:0},
-];
-
 // ─── ゾンビ種別マスター ───────────────────────────────────────
 // spdMul: 速度倍率  hpMul: HP倍率  scoreMul: スコア倍率
 const ZOMBIE_TYPES = [
@@ -87,13 +80,6 @@ const INNER_WALLS = [
   {x:320,y:500,w:40,h:60},{x:320,y:600,w:40,h:60},
   // x:600-640 (ダイニング|バスルーム) 扉: y:560-600
   {x:600,y:500,w:40,h:60},{x:600,y:600,w:40,h:60},
-];
-
-// ─── 近接武器マスター ─────────────────────────────────────────
-// damage: ダメージ  range: 当たり判定半径px  arc: 扇の角度rad
-const MELEE_WEAPONS = [
-  { id:'nail_bat', name:'釘バット', damage:95, range:65, arc:Math.PI*0.75, cooldown:850, color:'#A0522D' },
-  { id:'katana',   name:'刀',      damage:60, range:85, arc:Math.PI*1.20, cooldown:350, color:'#B8C8D8' },
 ];
 
 // ─── 鍵付き部屋定義 ───────────────────────────────────────────

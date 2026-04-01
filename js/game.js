@@ -2,9 +2,11 @@
 // game.js — ゲームループ・状態管理・初期化・終了処理
 // ============================================================
 
+let currentRepairCost=20, repairRequired=180; // [TASK-05]
+
 function resize() {
   VW = CWRAP.clientWidth;
-  VH = Math.round(VW * 0.65);
+  VH = CWRAP.clientHeight; // [TASK-10] flexで決まった高さをそのまま使う
   canvas.width  = VW;
   canvas.height = VH;
 }
@@ -29,9 +31,10 @@ function startGame() {
   repairing = false; repairTimer = 0; repairTarget = null;
   upgrades = { speed: 0, armor: 0, coinMag: 0 };
   waveClearAnim = 0;
-  WEAPONS.forEach(w => { w.upgDmg = 0; w.upgRate = 0; w.upgRange = 0; });
+  WEAPONS.forEach(w => { w.shopUpgrades.forEach(upg => { w[upg.stat] = 0; }); }); // [TASK-09]
   initWindows();
   initItems();   // アイテム・鍵・スロット初期化
+  npcs = []; npcBullets = []; _npcSpawnTimer = 0;
   _wallCache = null;
   gameRunning = true;
   document.getElementById('hKey').textContent = '0';
@@ -45,6 +48,20 @@ function endGame() {
   document.getElementById('ovSub').textContent =
     `スコア: ${score}  |  WAVE ${wave}  |  ${kills}体撃破  |  $${money}`;
   document.getElementById('overlay').classList.add('show');
+}
+
+// [TASK-05] 修理コスト動的計算
+function tryRepair(){
+  if(!gameRunning)return;
+  const near=nearestDamagedWindow();
+  if(!near||near.dist>55){addFloat(player.x,player.y-20,'窓に近づいて','#e24b4a');return;}
+  const w=near.win;
+  const missingHp=w.maxHp-w.hp;
+  currentRepairCost=w.open?35:Math.max(5,Math.ceil(missingHp/w.maxHp*20)); // [TASK-05]
+  repairRequired=w.open?240:Math.ceil(missingHp/w.maxHp*180+60);           // [TASK-05]
+  if(money<currentRepairCost){addFloat(player.x,player.y-20,`お金が足りない ($${currentRepairCost})`,'#e24b4a');return;}
+  repairing=true;repairTarget=w;repairTimer=0;
+  document.getElementById('repairBtn').classList.add('active');
 }
 
 function loop() {
@@ -88,6 +105,7 @@ function loop() {
   updateKeyPickups();
   updateFloorItemPickups();
   tryUnlockNearby();
+  updateNPCs(now);
 
   // 自動修理
   if (!repairing && !repairTarget) {
@@ -104,10 +122,10 @@ function loop() {
       document.getElementById('repairBtn').classList.remove('active');
     } else {
       repairTimer++;
-      if (repairTimer >= 180) {
+      if (repairTimer >= repairRequired) { // [TASK-05]
         repairTarget.hp = repairTarget.maxHp;
         repairTarget.open = false;
-        money = Math.max(0, money - 20);
+        money = Math.max(0, money - currentRepairCost); // [TASK-05]
         addFloat(repairTarget.x, repairTarget.y - 20, '窓修理完了!', '#63c422');
         playRepairDone();
         repairing = false; repairTarget = null; repairTimer = 0;
@@ -134,10 +152,42 @@ function loop() {
 
   // ゾンビ移動 + 衝突 + プレイヤー攻撃
   zombies.forEach(z => {
-    const ang = Math.atan2(player.y - z.y, player.x - z.x);
-    z.angle = ang;
-    z.x += Math.cos(ang) * z.speed;
-    z.y += Math.sin(ang) * z.speed;
+    // [TASK-03] 分離ステアリング（ゾンビ同士が重ならない）
+    let sepX = 0, sepY = 0;
+    zombies.forEach(other => {
+      if (other === z) return;
+      const dx = z.x - other.x, dy = z.y - other.y;
+      const d = Math.hypot(dx, dy);
+      if (d < (z.r + other.r + 4) && d > 0) {
+        sepX += dx / d * (z.r + other.r + 4 - d) * 0.4;
+        sepY += dy / d * (z.r + other.r + 4 - d) * 0.4;
+      }
+    });
+    z.x += sepX; z.y += sepY;
+
+    // [TASK-03] type 2（重）: 窓ターゲットがある間は窓に向かう
+    if (z.type === 2 && z.windowTarget && !z.windowTarget.open) {
+      const distToWin = Math.hypot(z.windowTarget.x - z.x, z.windowTarget.y - z.y);
+      if (distToWin > 20) {
+        const a = Math.atan2(z.windowTarget.y - z.y, z.windowTarget.x - z.x);
+        z.angle = a;
+        z.x += Math.cos(a) * z.speed; z.y += Math.sin(a) * z.speed;
+      }
+    } else if (z.type === 1) {
+      // [TASK-03] type 1（速）: ジグザグ移動
+      const ang = Math.atan2(player.y - z.y, player.x - z.x);
+      z.angle = ang;
+      const zigzag = Math.sin(Date.now() / 200 + z.seed) * 0.8;
+      const perpX = -Math.sin(ang), perpY = Math.cos(ang);
+      z.x += (Math.cos(ang) + perpX * zigzag) * z.speed;
+      z.y += (Math.sin(ang) + perpY * zigzag) * z.speed;
+    } else {
+      // [TASK-03] type 0（通常）: プレイヤーに直進（従来通り）
+      const ang = Math.atan2(player.y - z.y, player.x - z.x);
+      z.angle = ang;
+      z.x += Math.cos(ang) * z.speed; z.y += Math.sin(ang) * z.speed;
+    }
+
     z.x = Math.max(z.r, Math.min(MAP_W-z.r, z.x));
     z.y = Math.max(z.r, Math.min(MAP_H-z.r, z.y));
     resolveWalls(z);
@@ -187,18 +237,19 @@ function loop() {
   // 修理ボタン
   const near = nearestDamagedWindow();
   const repBtn = document.getElementById('repairBtn');
-  if (repairing) {
-    repBtn.style.borderColor='#63c422'; repBtn.style.color='#63c422';
-    repBtn.innerHTML=`修理中 ${Math.floor(repairTimer/180*100)}%<br><span style="font-size:9px">$20 離れないで</span>`;
-  } else if (near && near.dist < 55 && money >= 20) {
-    repBtn.style.borderColor='#63c422'; repBtn.style.color='#63c422';
-    repBtn.innerHTML='窓修理<br><span style="font-size:9px">自動開始中...</span>';
-  } else if (near && near.dist < 55) {
-    repBtn.style.borderColor='#e24b4a'; repBtn.style.color='#e24b4a';
-    repBtn.innerHTML='窓修理<br><span style="font-size:9px">お金が足りない</span>';
+  if (near && near.dist < 55) {
+    const w = near.win;
+    const mHp = w.maxHp - w.hp;
+    const cost = w.open ? 35 : Math.max(5, Math.ceil(mHp / w.maxHp * 20)); // [TASK-05]
+    const req  = w.open ? 240 : Math.ceil(mHp / w.maxHp * 180 + 60);       // [TASK-05]
+    const canAfford = money >= cost;
+    repBtn.style.borderColor = canAfford ? '#63c422' : '#e24b4a';
+    repBtn.style.color       = canAfford ? '#63c422' : '#e24b4a';
+    if (repairing) repBtn.innerHTML = `修理中 ${Math.floor(repairTimer / repairRequired * 100)}%<br><span style="font-size:9px">$${currentRepairCost} 離れないで</span>`; // [TASK-05]
+    else repBtn.innerHTML = `窓修理<br><span style="font-size:9px">${canAfford ? '$' + cost + 'でタップ' : 'お金不足 $' + cost}</span>`; // [TASK-05]
   } else {
-    repBtn.style.borderColor='#333'; repBtn.style.color='#888';
-    repBtn.innerHTML='窓修理<br><span style="font-size:9px">窓に近づくと自動</span>';
+    repBtn.style.borderColor = '#333'; repBtn.style.color = '#888';
+    repBtn.innerHTML = '窓修理<br><span style="font-size:9px">近づいてタップ</span>';
   }
 
   draw();

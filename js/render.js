@@ -66,6 +66,20 @@ function draw() {
     const pct = w.hp / w.maxHp;
     ctx.fillStyle = w.open ? '#4a0000' : pct > 0.6 ? '#85B7EB' : pct > 0.3 ? '#EF9F27' : '#e24b4a';
     ctx.fillRect(w.x-8, w.y-8, 16, 16);
+    // [TASK-05] 亀裂エフェクト（HP60%以下）
+    if (!w.open && w.hp/w.maxHp < 0.6) {
+      ctx.save();
+      const crackAlpha = w.hp/w.maxHp < 0.3
+        ? (Math.sin(Date.now()/150) > 0 ? 0.9 : 0.4)  // 30%以下は点滅
+        : 0.5;
+      ctx.globalAlpha = crackAlpha;
+      ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(w.x-4, w.y-5); ctx.lineTo(w.x+2, w.y); ctx.lineTo(w.x-2, w.y+5);
+      ctx.moveTo(w.x+3, w.y-4); ctx.lineTo(w.x, w.y+3);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.strokeStyle = w.open ? '#8b0000' : '#555'; ctx.lineWidth = 1;
     ctx.strokeRect(w.x-8, w.y-8, 16, 16);
     if (!w.open && w.hp < w.maxHp) {
@@ -80,7 +94,7 @@ function draw() {
     if (repairing && repairTarget === w) {
       ctx.strokeStyle = '#63c422'; ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(w.x, w.y, 14, -Math.PI/2, -Math.PI/2 + Math.PI*2*(repairTimer/180));
+      ctx.arc(w.x, w.y, 14, -Math.PI/2, -Math.PI/2 + Math.PI*2*(repairTimer/repairRequired)); // [TASK-05]
       ctx.stroke();
     }
   });
@@ -167,6 +181,9 @@ function draw() {
     ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
   });
 
+  // NPC（本体・NPC弾）
+  drawNPCs();
+
   // 近接スイングアーク
   if (meleeAnim) {
     ctx.globalAlpha = (meleeAnim.timer / meleeAnim.maxTimer) * 0.6;
@@ -224,6 +241,7 @@ function draw() {
   });
   ctx.fillStyle = '#378add';
   ctx.beginPath(); ctx.arc(MX+player.x*sx, MY+player.y*sy, 2, 0, Math.PI*2); ctx.fill();
+  drawNPCMinimap(MX, MY, sx, sy);
 
   // ─── ウェーブクリアバナー ────────────────────────────────────
   if (waveClearAnim > 0) {
