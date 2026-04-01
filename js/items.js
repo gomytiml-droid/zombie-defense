@@ -2,6 +2,14 @@
 // items.js — 鍵・鍵付き部屋・床アイテム・近接攻撃を管理する
 // ============================================================
 
+// [TASK-13a] ドア操作クールダウン管理
+let lastDoorActionTime = 0;
+const DOOR_ACTION_COOLDOWN = 300; // ms (0.3秒)
+
+// [TASK-15a] 物理攻撃中断管理
+const MELEE_INTERRUPT_DURATION = 500; // ms — 物理攻撃後に自動迎撃を中断する時間
+let meleeInterruptEndTime = 0;        // この時刻まで自動迎撃を中断
+
 // ─── 初期化（startGame から呼ぶ）────────────────────────────
 function initItems() {
   LOCKED_ROOMS.forEach(r => { lockedRoomState[r.id] = false; });
@@ -34,6 +42,15 @@ function getActiveMelee() {
   return (s && s.type === 'melee') ? MELEE_WEAPONS[s.meleeIdx] : null;
 }
 
+// ─── どちらかのスロットにある近接武器を返す（物理攻撃ボタン用） [TASK-15a]
+function getAnyMelee() {
+  for (let i = 0; i < itemSlots.length; i++) {
+    const s = itemSlots[i];
+    if (s && s.type === 'melee') return MELEE_WEAPONS[s.meleeIdx];
+  }
+  return null; // 近接武器なし → 素手
+}
+
 // ─── スロット入れ替え ─────────────────────────────────────────
 function swapSlots() {
   activeSlot = activeSlot === 0 ? 1 : 0;
@@ -51,41 +68,62 @@ function updateItemHUD() {
   });
 }
 
-// ─── 近接自動攻撃 ─────────────────────────────────────────────
-function doMeleeAuto(now) {
-  const mw = getActiveMelee();
-  if (!mw || now < nextMeleeTime || !zombies.length) return;
-
+// ─── 近接攻撃共通実行（doMeleeAuto / doPhysicalAttack 共用）─── [TASK-15a]
+function _executeMeleeAttack(damage, range, arc, color) {
+  if (!zombies.length) return;
   let nearest = null, nd = Infinity;
   zombies.forEach(z => {
     const d = Math.hypot(z.x - player.x, z.y - player.y);
-    if (d < mw.range && d < nd) { nd = d; nearest = z; }
+    if (d < range && d < nd) { nd = d; nearest = z; }
   });
   if (!nearest) return;
 
-  nextMeleeTime = now + mw.cooldown;
   const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-
-  // 扇形の範囲内ゾンビ全員にダメージ
   zombies.forEach(z => {
     const d = Math.hypot(z.x - player.x, z.y - player.y);
-    if (d > mw.range) return;
+    if (d > range) return;
     let diff = Math.atan2(z.y - player.y, z.x - player.x) - baseAngle;
     while (diff >  Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    if (Math.abs(diff) > mw.arc / 2) return;
-
-    z.hp -= mw.damage;
+    if (Math.abs(diff) > arc / 2) return;
+    z.hp -= damage;
     addParticle(z.x, z.y, '#cc3311', 6);
     if (z.hp <= 0) zombieDie(z);
   });
+  meleeAnim = { x: player.x, y: player.y, angle: baseAngle, range, arc, timer: 12, maxTimer: 12, color };
+}
 
-  // スイングアニメーション
-  meleeAnim = {
-    x: player.x, y: player.y,
-    angle: baseAngle, range: mw.range, arc: mw.arc,
-    timer: 12, maxTimer: 12, color: mw.color,
-  };
+// ─── 自動近接攻撃（アクティブスロットが近接武器の時） ─────────── [TASK-15a]
+function doMeleeAuto(now) {
+  if (now < meleeInterruptEndTime) return; // 物理攻撃中断中はスキップ
+  const mw = getActiveMelee();
+  if (!mw || now < nextMeleeTime) return;
+  nextMeleeTime = now + mw.cooldown;
+  _executeMeleeAttack(mw.damage, mw.range, mw.arc, mw.color);
+}
+
+// ─── 物理攻撃（ボタン発動）────────────────────────────────────── [TASK-15a]
+// 武器なし → 素手殴打 / 近接武器所持 → 武器攻撃（1.3倍ダメージ）
+function doPhysicalAttack() {
+  if (!gameRunning) return;
+  const now = performance.now();
+  if (now < nextMeleeTime) return; // クールダウン中
+
+  // 自動迎撃を一時中断
+  meleeInterruptEndTime = now + MELEE_INTERRUPT_DURATION;
+
+  const mw = getAnyMelee();
+  if (mw) {
+    // 近接武器あり: 1.3倍強化攻撃
+    nextMeleeTime = now + mw.cooldown;
+    _executeMeleeAttack(Math.round(mw.damage * 1.3), mw.range, mw.arc, mw.color);
+    addFloat(player.x, player.y - 28, mw.name + '!', mw.color);
+  } else {
+    // 素手殴打: 範囲狭い・ダメージそこそこ
+    nextMeleeTime = now + 600;
+    _executeMeleeAttack(30, 35, Math.PI * 0.9, '#ffaa44');
+    addFloat(player.x, player.y - 28, '素手!', '#ffaa44');
+  }
 }
 
 // ─── 鍵ピックアップ ───────────────────────────────────────────
@@ -126,19 +164,39 @@ function updateFloorItemPickups() {
   });
 }
 
-// ─── 鍵ドアに近づいたら自動解錠 ──────────────────────────────
-function tryUnlockNearby() {
+// ─── 鍵ドアを手動でトグル開閉（タップ操作） ──────────────────────────────
+// [TASK-13a]
+function tryToggleDoor() {
   if (playerKeys <= 0) return;
+  const now = performance.now();
+  if (now - lastDoorActionTime < DOOR_ACTION_COOLDOWN) return;
+
+  let acted = false;
   LOCKED_ROOMS.forEach(room => {
-    if (lockedRoomState[room.id]) return;
+    if (acted) return;
     const d = room.door;
     const cx = d.x + d.w / 2, cy = d.y + d.h / 2;
     if (Math.hypot(cx - player.x, cy - player.y) < 52) {
-      lockedRoomState[room.id] = true;
-      playerKeys--;
-      document.getElementById('hKey').textContent = playerKeys;
-      addFloat(cx, cy - 20, room.label + ' 解錠!', '#EF9F27');
+      lockedRoomState[room.id] = !lockedRoomState[room.id];
       _wallCache = null;
+      lastDoorActionTime = now;
+      acted = true;
+      const label = lockedRoomState[room.id]
+        ? room.label + ' 解錠!'
+        : room.label + ' 施錠';
+      const color = lockedRoomState[room.id] ? '#EF9F27' : '#aaaaaa';
+      addFloat(cx, cy - 20, label, color);
     }
+  });
+}
+
+// ─── 近くにドアがあるか判定（UIボタンの active 制御用） ────────
+// [TASK-13a]
+function isNearDoor() {
+  if (playerKeys <= 0) return false;
+  return LOCKED_ROOMS.some(room => {
+    const d = room.door;
+    const cx = d.x + d.w / 2, cy = d.y + d.h / 2;
+    return Math.hypot(cx - player.x, cy - player.y) < 52;
   });
 }

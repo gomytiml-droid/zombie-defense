@@ -79,6 +79,9 @@ function spawnZombie() {
 
 // ─── 自動照準・発射（アクティブスロットが銃の時だけ）───────────
 function fireAuto(now) {
+  // [TASK-15b] 物理攻撃中断中は自動射撃をスキップ
+  if (typeof meleeInterruptEndTime !== 'undefined' && now < meleeInterruptEndTime) return;
+
   const wp = getActiveWeapon();
   if (!wp) return;
 

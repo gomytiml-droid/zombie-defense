@@ -26,6 +26,22 @@
 //
 // ─────────────────────────────────────────────────────────────
 
+// ─── NPC 行動モード定数 [TASK-14a]
+const NPC_MODE = {
+  WANDER:       1, // 安全地帯でゆっくりウロウロ
+  FLEE:         2, // ゾンビから逃げる（武器なし）
+  DEFEND:       3, // その場で迎撃（武器あり・待機）
+  ACTIVE:       4, // 自分からゾンビを攻撃
+  FOLLOW:       5, // プレイヤーに追従
+  FOLLOW_FIGHT: 6, // プレイヤーに追従 + 武器で攻撃
+};
+
+// ─── NPC コマンド定数 [TASK-14a]
+const NPC_CMD = {
+  FOLLOW:  'follow',
+  STANDBY: 'standby',
+};
+
 // ─── NPC 種別定数 ─────────────────────────────────────────────
 const NPC_TYPES = {
   SURVIVOR: 0, // 生存者: 自動スポーン。救助するとお金+スコア
@@ -40,7 +56,7 @@ const NPC_CONFIG = [
     type:         NPC_TYPES.SURVIVOR,
     label:        '生存者',
     r:            9,
-    hp:           50,
+    hp:           100, // [TASK-14a]
     speed:        1.1,
     bodyColor:    '#c8a84b',
     headColor:    '#e8c87a',
@@ -54,7 +70,7 @@ const NPC_CONFIG = [
     type:         NPC_TYPES.MEDIC,
     label:        '医師',
     r:            9,
-    hp:           80,
+    hp:           100, // [TASK-14a]
     speed:        1.8,
     bodyColor:    '#2a7a4a',
     headColor:    '#5aba7a',
@@ -67,7 +83,7 @@ const NPC_CONFIG = [
     type:         NPC_TYPES.GUARD,
     label:        '警備',
     r:            10,
-    hp:           120,
+    hp:           100, // [TASK-14a]
     speed:        1.4,
     bodyColor:    '#2a4a7a',
     headColor:    '#4a7aaa',
@@ -123,6 +139,11 @@ function _makeNPC(type) {
     nextFireTime: 0,
     dead:         false,
     anim:         Math.floor(Math.random() * 60),
+    // [TASK-14a]
+    weapon:      null,
+    mode:        NPC_MODE.WANDER,
+    command:     null,
+    npcFireTime: 0,
   };
 }
 
@@ -168,11 +189,18 @@ function updateNPCs(now) {
     if (npc.dead) return;
     npc.anim = (npc.anim + 1) % 62;
 
-    switch (npc.type) {
-      case NPC_TYPES.SURVIVOR: _updateSurvivor(npc, now); break;
-      case NPC_TYPES.MEDIC:    _updateMedic(npc, now);    break;
-      case NPC_TYPES.GUARD:    _updateGuard(npc, now);    break;
+    // [TASK-14a] 型別AIを廃止し統一AIに変更。生存者の救助判定は維持
+    if (npc.type === NPC_TYPES.SURVIVOR) {
+      if (Math.hypot(npc.x - player.x, npc.y - player.y) < (npc.rescueRange || 30) + player.r) {
+        money += npc.rescueMoney || 0;
+        score += npc.rescueScore || 0;
+        addFloat(npc.x, npc.y - 22, '救助! +$' + (npc.rescueMoney || 0), '#63c422');
+        addParticle(npc.x, npc.y, '#c8a84b', 12);
+        npc.dead = true;
+        return;
+      }
     }
+    _updateNPCAI(npc, now); // [TASK-14a]
 
     // ゾンビに接触ダメージを受ける
     zombies.forEach(z => {
@@ -230,170 +258,179 @@ function updateNPCs(now) {
   npcs = npcs.filter(n => !n.dead);
 }
 
-// ─── 生存者 AI ──────────────────────────────────────────────────
-function _updateSurvivor(npc, now) {
-  // プレイヤーに触れたら救助完了
-  if (Math.hypot(npc.x - player.x, npc.y - player.y) < npc.rescueRange + player.r) {
-    money += npc.rescueMoney;
-    score += npc.rescueScore;
-    addFloat(npc.x, npc.y - 22, '救助! +$' + npc.rescueMoney, '#63c422');
-    addParticle(npc.x, npc.y, '#c8a84b', 12);
-    npc.dead = true;
-    return;
-  }
-
-  // 最近接ゾンビを探す
+// ─── NPC 統一AI ────────────────────────────────────────────────── [TASK-14a]
+function _updateNPCAI(npc, now) {
   let nearestZ = null, nearestZDist = Infinity;
   zombies.forEach(z => {
     const d = Math.hypot(z.x - npc.x, z.y - npc.y);
     if (d < nearestZDist) { nearestZDist = d; nearestZ = z; }
   });
 
-  const fleeRadius = 130;
+  // 行動モード決定
+  if (npc.command === NPC_CMD.FOLLOW) {
+    npc.mode = npc.weapon ? NPC_MODE.FOLLOW_FIGHT : NPC_MODE.FOLLOW;
+  } else if (npc.command === NPC_CMD.STANDBY) {
+    npc.mode = npc.weapon ? NPC_MODE.DEFEND : NPC_MODE.WANDER;
+  } else {
+    if (!npc.weapon) {
+      npc.mode = nearestZDist < 150 ? NPC_MODE.FLEE : NPC_MODE.WANDER;
+    } else {
+      npc.mode = nearestZDist < 200 ? NPC_MODE.ACTIVE : NPC_MODE.WANDER;
+    }
+  }
 
-  if (nearestZ && nearestZDist < fleeRadius) {
-    // ゾンビから逃げつつプレイヤーへ向かう（距離によって混合比を変える）
-    const awayAng     = Math.atan2(npc.y - nearestZ.y, npc.x - nearestZ.x);
-    const toPlayerAng = Math.atan2(player.y - npc.y, player.x - npc.x);
-    const blend = Math.min(1, nearestZDist / fleeRadius); // 近いほど回避優先
-    const ang = awayAng * (1 - blend) + toPlayerAng * blend;
-    npc.vx = Math.cos(ang) * npc.speed;
-    npc.vy = Math.sin(ang) * npc.speed;
+  switch (npc.mode) {
+    case NPC_MODE.WANDER: {
+      npc.wanderTimer--;
+      if (npc.wanderTimer <= 0) {
+        npc.wanderTimer = 90 + Math.floor(Math.random() * 120);
+        if (Math.random() < 0.25) { npc.vx = 0; npc.vy = 0; }
+        else {
+          const ang = Math.random() * Math.PI * 2;
+          npc.vx = Math.cos(ang) * npc.speed * 0.45;
+          npc.vy = Math.sin(ang) * npc.speed * 0.45;
+        }
+      }
+      break;
+    }
+    case NPC_MODE.FLEE: {
+      if (nearestZ) {
+        const awayAng = Math.atan2(npc.y - nearestZ.y, npc.x - nearestZ.x);
+        const toPlayerAng = Math.atan2(player.y - npc.y, player.x - npc.x);
+        const blend = Math.min(1, nearestZDist / 150);
+        const ang = awayAng * (1 - blend) + toPlayerAng * blend;
+        npc.vx = Math.cos(ang) * npc.speed;
+        npc.vy = Math.sin(ang) * npc.speed;
+      }
+      break;
+    }
+    case NPC_MODE.DEFEND: {
+      npc.vx *= 0.85; npc.vy *= 0.85;
+      _npcFire(npc, nearestZ, now);
+      break;
+    }
+    case NPC_MODE.ACTIVE: {
+      if (nearestZ) {
+        const fireR = _getNPCFireRange(npc);
+        if (nearestZDist > fireR * 0.70) {
+          const ang = Math.atan2(nearestZ.y - npc.y, nearestZ.x - npc.x);
+          npc.vx = Math.cos(ang) * npc.speed;
+          npc.vy = Math.sin(ang) * npc.speed;
+        } else { npc.vx *= 0.82; npc.vy *= 0.82; }
+        _npcFire(npc, nearestZ, now);
+      }
+      break;
+    }
+    case NPC_MODE.FOLLOW: {
+      const dp = Math.hypot(player.x - npc.x, player.y - npc.y);
+      if (dp > 48) {
+        const ang = Math.atan2(player.y - npc.y, player.x - npc.x);
+        npc.vx = Math.cos(ang) * npc.speed; npc.vy = Math.sin(ang) * npc.speed;
+      } else { npc.vx *= 0.75; npc.vy *= 0.75; }
+      break;
+    }
+    case NPC_MODE.FOLLOW_FIGHT: {
+      const dp2 = Math.hypot(player.x - npc.x, player.y - npc.y);
+      if (dp2 > 48) {
+        const ang = Math.atan2(player.y - npc.y, player.x - npc.x);
+        npc.vx = Math.cos(ang) * npc.speed; npc.vy = Math.sin(ang) * npc.speed;
+      } else { npc.vx *= 0.75; npc.vy *= 0.75; }
+      _npcFire(npc, nearestZ, now);
+      break;
+    }
+  }
 
-    // パニック射撃（精度低め）
-    if (nearestZDist < 90 && now > npc.nextFireTime) {
-      npc.nextFireTime = now + 1400;
-      const fireAng = Math.atan2(nearestZ.y - npc.y, nearestZ.x - npc.x)
-                    + (Math.random() - 0.5) * 0.3;
+  npc.x += npc.vx; npc.y += npc.vy;
+  npc.x = Math.max(npc.r, Math.min(MAP_W - npc.r, npc.x));
+  npc.y = Math.max(npc.r, Math.min(MAP_H - npc.r, npc.y));
+  resolveWalls(npc);
+}
+
+// ─── NPC 射程取得 ─────────────────────────────────────────────── [TASK-14a]
+function _getNPCFireRange(npc) {
+  if (!npc.weapon) return 0;
+  if (npc.weapon.type === 'gun') {
+    const wp = WEAPONS[npc.weapon.weaponIdx];
+    return wp ? (wp.range + (wp.upgRange || 0) * 20) : 120;
+  }
+  if (npc.weapon.type === 'melee') {
+    const mw = MELEE_WEAPONS[npc.weapon.meleeIdx];
+    return mw ? mw.range : 40;
+  }
+  return 120;
+}
+
+// ─── NPC 射撃・近接 ──────────────────────────────────────────── [TASK-14a]
+function _npcFire(npc, targetZ, now) {
+  if (!npc.weapon || !targetZ) return;
+  const dist = Math.hypot(targetZ.x - npc.x, targetZ.y - npc.y);
+  const fireR = _getNPCFireRange(npc);
+  if (dist > fireR) return;
+
+  if (npc.weapon.type === 'gun') {
+    const wp = WEAPONS[npc.weapon.weaponIdx];
+    if (!wp) return;
+    const rate = Math.max(80, wp.fireRate - (wp.upgRate || 0) * 80);
+    const dmg  = wp.damage + (wp.upgDmg || 0) * 8;
+    if (now < npc.npcFireTime) return;
+    npc.npcFireTime = now + rate;
+    const baseAng = Math.atan2(targetZ.y - npc.y, targetZ.x - npc.x);
+    for (let i = 0; i < wp.bullets; i++) {
+      const ang = baseAng + (Math.random() - 0.5) * wp.spread * 1.5;
       npcBullets.push({
         x: npc.x, y: npc.y,
-        vx: Math.cos(fireAng) * 6, vy: Math.sin(fireAng) * 6,
-        dmg: 8, life: 18, color: '#c8a84b', hit: false,
+        vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
+        dmg, life: Math.round(fireR / 7), color: wp.color, hit: false,
       });
     }
-  } else {
-    // 通常: ランダムウォーク
-    npc.wanderTimer--;
-    if (npc.wanderTimer <= 0) {
-      npc.wanderTimer = 80 + Math.floor(Math.random() * 100);
-      if (Math.random() < 0.2) {
-        npc.vx = 0; npc.vy = 0; // たまに静止
-      } else {
-        const ang = Math.random() * Math.PI * 2;
-        npc.vx = Math.cos(ang) * npc.speed * 0.55;
-        npc.vy = Math.sin(ang) * npc.speed * 0.55;
-      }
-    }
-  }
-
-  npc.x += npc.vx;
-  npc.y += npc.vy;
-  npc.x = Math.max(npc.r, Math.min(MAP_W - npc.r, npc.x));
-  npc.y = Math.max(npc.r, Math.min(MAP_H - npc.r, npc.y));
-  resolveWalls(npc);
-}
-
-// ─── 医師 AI ────────────────────────────────────────────────────
-function _updateMedic(npc, now) {
-  const distToPlayer = Math.hypot(npc.x - player.x, npc.y - player.y);
-
-  // プレイヤーに追従（一定距離以内なら停止）
-  if (distToPlayer > 50) {
-    const ang = Math.atan2(player.y - npc.y, player.x - npc.x);
-    npc.vx = Math.cos(ang) * npc.speed;
-    npc.vy = Math.sin(ang) * npc.speed;
-  } else {
-    npc.vx *= 0.75;
-    npc.vy *= 0.75;
-  }
-
-  // ゾンビから押し離される
-  zombies.forEach(z => {
-    const d = Math.hypot(z.x - npc.x, z.y - npc.y);
-    if (d < 90 && d > 0) {
-      const push = (90 - d) / 90;
-      const ang  = Math.atan2(npc.y - z.y, npc.x - z.x);
-      npc.vx += Math.cos(ang) * push * 1.8;
-      npc.vy += Math.sin(ang) * push * 1.8;
-    }
-  });
-
-  // 回復範囲内のプレイヤー HP を毎フレーム回復
-  if (distToPlayer < npc.healRange && player.hp < player.maxHp) {
-    player.hp = Math.min(player.maxHp, player.hp + npc.healPerFrame);
-    if (npc.anim % 20 === 0) {
-      addParticle(player.x, player.y, '#5aba7a', 2);
-    }
-  }
-
-  npc.x += npc.vx;
-  npc.y += npc.vy;
-  npc.x = Math.max(npc.r, Math.min(MAP_W - npc.r, npc.x));
-  npc.y = Math.max(npc.r, Math.min(MAP_H - npc.r, npc.y));
-  resolveWalls(npc);
-}
-
-// ─── 警備員 AI ──────────────────────────────────────────────────
-function _updateGuard(npc, now) {
-  // 最も危険な開いた窓（ゾンビが近い窓を優先）を目標にする
-  let goal = null, goalPriority = Infinity;
-
-  windows.forEach(w => {
-    if (!w.open) return;
-    const wd = Math.hypot(w.x - npc.x, w.y - npc.y);
-    const hasThreat = zombies.some(z => Math.hypot(z.x - w.x, z.y - w.y) < 80);
-    const priority  = hasThreat ? wd * 0.5 : wd; // 脅威ありで優先度UP
-    if (priority < goalPriority) { goalPriority = priority; goal = { x: w.x, y: w.y }; }
-  });
-
-  // 開いた窓がなければ最近接ゾンビを直接追う
-  if (!goal && zombies.length > 0) {
-    let nd = Infinity;
+  } else if (npc.weapon.type === 'melee') {
+    const mw = MELEE_WEAPONS[npc.weapon.meleeIdx];
+    if (!mw || now < npc.npcFireTime) return;
+    npc.npcFireTime = now + mw.cooldown;
     zombies.forEach(z => {
-      const d = Math.hypot(z.x - npc.x, z.y - npc.y);
-      if (d < nd) { nd = d; goal = { x: z.x, y: z.y }; }
+      if (Math.hypot(z.x - npc.x, z.y - npc.y) > mw.range) return;
+      z.hp -= mw.damage;
+      addParticle(z.x, z.y, '#cc3311', 5);
+      if (z.hp <= 0) zombieDie(z);
     });
   }
+}
 
-  // 目標に向かって移動（射程の 65% 地点で停止）
-  if (goal) {
-    const d = Math.hypot(goal.x - npc.x, goal.y - npc.y);
-    if (d > npc.fireRange * 0.65) {
-      const ang = Math.atan2(goal.y - npc.y, goal.x - npc.x);
-      npc.vx = Math.cos(ang) * npc.speed;
-      npc.vy = Math.sin(ang) * npc.speed;
-    } else {
-      npc.vx *= 0.8;
-      npc.vy *= 0.8;
-    }
-  }
+// ─── 近くの NPC に武器を渡す ──────────────────────────────────── [TASK-14a]
+function giveWeaponToNPC() {
+  if (!gameRunning) return;
+  const target = npcs.find(n => !n.dead && Math.hypot(n.x - player.x, n.y - player.y) < 52);
+  if (!target) { addFloat(player.x, player.y - 24, 'NPCが近くにいない', '#e24b4a'); return; }
 
-  // 射程内の最近接ゾンビを狙い撃ち
-  let target = null, targetDist = Infinity;
-  zombies.forEach(z => {
-    const d = Math.hypot(z.x - npc.x, z.y - npc.y);
-    if (d < npc.fireRange && d < targetDist) { targetDist = d; target = z; }
-  });
+  // 非アクティブスロット優先
+  const nonActive = activeSlot === 0 ? 1 : 0;
+  let srcSlot = -1;
+  if (itemSlots[nonActive] && itemSlots[nonActive].type) srcSlot = nonActive;
+  else if (itemSlots[activeSlot] && itemSlots[activeSlot].type) srcSlot = activeSlot;
 
-  if (target && now > npc.nextFireTime) {
-    npc.nextFireTime = now + npc.fireRate;
-    const ang = Math.atan2(target.y - npc.y, target.x - npc.x)
-              + (Math.random() - 0.5) * 0.08;
-    npcBullets.push({
-      x: npc.x, y: npc.y,
-      vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
-      dmg: npc.fireDmg,
-      life: Math.ceil(npc.fireRange / 7),
-      color: '#85B7EB',
-      hit: false,
-    });
-  }
+  if (srcSlot === -1) { addFloat(player.x, player.y - 24, '渡せる武器がない', '#e24b4a'); return; }
 
-  npc.x += npc.vx;
-  npc.y += npc.vy;
-  npc.x = Math.max(npc.r, Math.min(MAP_W - npc.r, npc.x));
-  npc.y = Math.max(npc.r, Math.min(MAP_H - npc.r, npc.y));
-  resolveWalls(npc);
+  target.weapon = { ...itemSlots[srcSlot] };
+  itemSlots[srcSlot] = null;
+  updateItemHUD();
+  addFloat(target.x, target.y - 22, target.label + 'に武器を渡した!', '#63c422');
+}
+
+// ─── 近くの NPC にコマンドを出す ──────────────────────────────── [TASK-14a]
+function commandNPC(cmd) {
+  if (!gameRunning) return;
+  const target = npcs.find(n => !n.dead && Math.hypot(n.x - player.x, n.y - player.y) < 60);
+  if (!target) { addFloat(player.x, player.y - 24, 'NPCが近くにいない', '#e24b4a'); return; }
+  target.command = target.command === cmd ? null : cmd;
+  const msg   = cmd === NPC_CMD.FOLLOW ? 'ついてきて!' : 'ここで待機!';
+  const color = cmd === NPC_CMD.FOLLOW ? '#85B7EB' : '#EF9F27';
+  addFloat(target.x, target.y - 22, msg, color);
+}
+
+// ─── 近くに NPC がいるか（UIボタン制御用） ───────────────────── [TASK-14a]
+function isNearNPC() {
+  if (!gameRunning) return false;
+  return npcs.some(n => !n.dead && Math.hypot(n.x - player.x, n.y - player.y) < 60);
 }
 
 // ─── NPC 描画（ctx は -camX,-camY 変換済み状態で呼ぶ）────────
@@ -440,6 +477,23 @@ function drawNPCs() {
     ctx.font      = '9px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(npc.label, npc.x, npc.y - npc.r - 5 + bob);
+
+    // ── 武器所持アイコン [TASK-14c] ──
+    if (npc.weapon) {
+      const icon = npc.weapon.type === 'melee' ? '⚔' : '🔫';
+      ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#EF9F27';
+      ctx.fillText(icon, npc.x + npc.r + 4, npc.y - npc.r - 5 + bob);
+    }
+
+    // ── コマンド状態アイコン [TASK-14c] ──
+    if (npc.command === 'follow') {
+      ctx.fillStyle = '#85B7EB'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('▶', npc.x, npc.y + npc.r + 8 + bob);
+    } else if (npc.command === 'standby') {
+      ctx.fillStyle = '#EF9F27'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('■', npc.x, npc.y + npc.r + 8 + bob);
+    }
 
     // ── HP バー ──
     const hpPct = Math.max(0, npc.hp / npc.maxHp);

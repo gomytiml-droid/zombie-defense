@@ -38,14 +38,17 @@
       </div>
       <div id="action-bar">
         <div class="abtn" id="repairBtn">窓修理<br><span style="font-size:9px">窓に近づくと自動</span></div>
+        <div class="abtn phys-btn" id="physBtn" onclick="doPhysicalAttack()">👊<br><span style="font-size:9px">物理攻撃</span></div><!-- [TASK-15c] -->
+        <div class="abtn" id="doorBtn" onclick="tryToggleDoor()">🔑ドア<br><span style="font-size:9px">開 / 閉</span></div><!-- [TASK-13b] -->
+        <!-- [TASK-14c] NPC操作ボタン -->
+        <div class="abtn" id="npcWeaponBtn" onclick="giveWeaponToNPC()">🔫渡す<br><span style="font-size:9px">NPC武器</span></div>
+        <div class="abtn" id="npcFollowBtn" onclick="commandNPC('follow')">🚶<br><span style="font-size:9px">ついてこい</span></div>
+        <div class="abtn" id="npcStandbyBtn" onclick="commandNPC('standby')">✋<br><span style="font-size:9px">待機</span></div>
         <div class="abtn" onclick="openShop()" style="border-color:#EF9F27;color:#EF9F27;">ショップ<br><span style="font-size:9px">アップグレード</span></div>
       </div>
-      <div id="controls">
-        <div id="stick-pad"><div id="stick-knob"></div></div>
-        <div style="font-size:10px;color:#444;text-align:right">
-          移動: スティック / WASD<br>
-          SWAP: Tab / Q<br>
-          鍵: ゾンビが落とす
+      <div id="controls"><!-- [TASK-11] フローティングスティック化 -->
+        <div style="font-size:10px;color:#333;text-align:center;width:100%">
+          画面をスライドして移動 / WASD
         </div>
       </div>
     </div>

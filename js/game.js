@@ -5,6 +5,20 @@
 let currentRepairCost=20, repairRequired=180; // [TASK-05]
 let waveStartKills=0; // [TASK-07] このWaveの開始時kills
 
+// ─── ゾンビの最近接ターゲット（player or NPC）を返す ─────────── [TASK-14b]
+function _getNearestTarget(zx, zy) {
+  let nearest = player;
+  let nd = Math.hypot(player.x - zx, player.y - zy);
+  if (typeof npcs !== 'undefined') {
+    npcs.forEach(n => {
+      if (n.dead) return;
+      const d = Math.hypot(n.x - zx, n.y - zy);
+      if (d < nd) { nd = d; nearest = n; }
+    });
+  }
+  return nearest;
+}
+
 function resize() {
   VW = CWRAP.clientWidth;
   VH = CWRAP.clientHeight; // [TASK-10] flexで決まった高さをそのまま使う
@@ -123,10 +137,9 @@ function loop() {
   doMeleeAuto(now);
   if (meleeAnim) { meleeAnim.timer--; if (meleeAnim.timer <= 0) meleeAnim = null; }
 
-  // アイテム・鍵・解錠
+  // アイテム・鍵 [TASK-13a] tryUnlockNearby 削除→手動トグルに変更
   updateKeyPickups();
   updateFloorItemPickups();
-  tryUnlockNearby();
   updateNPCs(now);
 
   // 自動修理
@@ -196,16 +209,18 @@ function loop() {
         z.x += Math.cos(a) * z.speed; z.y += Math.sin(a) * z.speed;
       }
     } else if (z.type === 1) {
-      // [TASK-03] type 1（速）: ジグザグ移動
-      const ang = Math.atan2(player.y - z.y, player.x - z.x);
+      // [TASK-03] type 1（速）: ジグザグ移動 [TASK-14b] ターゲット最近接に変更
+      const tgt1 = _getNearestTarget(z.x, z.y);
+      const ang = Math.atan2(tgt1.y - z.y, tgt1.x - z.x);
       z.angle = ang;
       const zigzag = Math.sin(Date.now() / 200 + z.seed) * 0.8;
       const perpX = -Math.sin(ang), perpY = Math.cos(ang);
       z.x += (Math.cos(ang) + perpX * zigzag) * z.speed;
       z.y += (Math.sin(ang) + perpY * zigzag) * z.speed;
     } else {
-      // [TASK-03] type 0（通常）: プレイヤーに直進（従来通り）
-      const ang = Math.atan2(player.y - z.y, player.x - z.x);
+      // [TASK-03] type 0（通常）直進 [TASK-14b] ターゲット最近接に変更
+      const tgt0 = _getNearestTarget(z.x, z.y);
+      const ang = Math.atan2(tgt0.y - z.y, tgt0.x - z.x);
       z.angle = ang;
       z.x += Math.cos(ang) * z.speed; z.y += Math.sin(ang) * z.speed;
     }
@@ -213,12 +228,14 @@ function loop() {
     z.x = Math.max(z.r, Math.min(MAP_W-z.r, z.x));
     z.y = Math.max(z.r, Math.min(MAP_H-z.r, z.y));
     resolveWalls(z);
+    // [TASK-14b] プレイヤー & NPC 両方に接触ダメージ
     if (Math.hypot(z.x-player.x, z.y-player.y) < player.r + z.r) {
       const armor = upgrades.armor * 0.08;
       player.hp -= 0.25 * (1 - armor);
       playHurt();
       if (player.hp <= 0) { player.hp = 0; endGame(); }
     }
+    // NPC への接触ダメージは npc.js の updateNPCs 内で処理済みのため追加不要
   });
 
   // 弾がゾンビに当たる

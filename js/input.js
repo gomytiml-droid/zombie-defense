@@ -1,43 +1,56 @@
 // ============================================================
-// input.js — 入力管理（キーボード・タッチジョイスティック）
+// input.js — 入力管理（キーボード・フローティングタッチスティック）
 // ============================================================
 
 let moveX = 0, moveY = 0;
 
-const pad  = document.getElementById('stick-pad');
-const knob = document.getElementById('stick-knob');
-let stickId = -1;
-const maxR = 22;
+// [TASK-11] フローティングスティック
+const FLOAT_MAX_R = 60;   // px: この距離でmoveが±1.0
+let stickId    = -1;
+let originX    = 0;
+let originY    = 0;
 
-function updStick(cx, cy) {
-  const rect = pad.getBoundingClientRect();
-  const dx = cx - (rect.left + rect.width / 2);
-  const dy = cy - (rect.top  + rect.height / 2);
-  const dist = Math.hypot(dx, dy);
-  const ang  = Math.atan2(dy, dx);
-  const cl   = Math.min(dist, maxR);
-  knob.style.transform = `translate(calc(-50% + ${Math.cos(ang)*cl}px), calc(-50% + ${Math.sin(ang)*cl}px))`;
-  moveX = Math.cos(ang) * (Math.min(dist, maxR) / maxR);
-  moveY = Math.sin(ang) * (Math.min(dist, maxR) / maxR);
-}
+const canvasWrap = document.getElementById('canvas-wrap'); // [TASK-11]
 
-pad.addEventListener('touchstart', e => {
+canvasWrap.addEventListener('touchstart', e => { // [TASK-11]
   e.preventDefault();
+  if (stickId !== -1) return;           // 既に操作中なら無視
   const t = e.changedTouches[0];
   stickId = t.identifier;
-  updStick(t.clientX, t.clientY);
+  originX = t.clientX;
+  originY = t.clientY;
+  moveX = 0;
+  moveY = 0;
 }, { passive: false });
 
-document.addEventListener('touchmove', e => {
-  for (let t of e.changedTouches) { if (t.identifier === stickId) updStick(t.clientX, t.clientY); }
+document.addEventListener('touchmove', e => { // [TASK-11]
+  for (const t of e.changedTouches) {
+    if (t.identifier !== stickId) continue;
+    const dx = t.clientX - originX;
+    const dy = t.clientY - originY;
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0) { moveX = 0; moveY = 0; continue; }
+    const ratio = Math.min(dist, FLOAT_MAX_R) / FLOAT_MAX_R;
+    moveX = (dx / dist) * ratio;
+    moveY = (dy / dist) * ratio;
+  }
 }, { passive: true });
 
-document.addEventListener('touchend', e => {
-  for (let t of e.changedTouches) {
-    if (t.identifier === stickId) {
-      stickId = -1; moveX = 0; moveY = 0;
-      knob.style.transform = 'translate(-50%, -50%)';
-    }
+document.addEventListener('touchend', e => { // [TASK-11]
+  for (const t of e.changedTouches) {
+    if (t.identifier !== stickId) continue;
+    stickId = -1;
+    moveX = 0;
+    moveY = 0;
+  }
+}, { passive: true });
+
+document.addEventListener('touchcancel', e => { // [TASK-11]
+  for (const t of e.changedTouches) {
+    if (t.identifier !== stickId) continue;
+    stickId = -1;
+    moveX = 0;
+    moveY = 0;
   }
 }, { passive: true });
 
@@ -46,7 +59,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === 'd') moveX =  1;
   if (e.key === 'ArrowUp'    || e.key === 'w') moveY = -1;
   if (e.key === 'ArrowDown'  || e.key === 's') moveY =  1;
-  // Tab/Q: スロット入れ替え
   if (e.key === 'Tab' || e.key === 'q' || e.key === 'Q') { e.preventDefault(); swapSlots(); }
   if (e.key === 'Escape') closeShop();
 });

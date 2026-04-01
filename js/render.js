@@ -43,23 +43,33 @@ function draw() {
   ctx.fillStyle = '#2c2820';
   OUTER_WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
 
-  // 鍵付きドア（未解錠）
+  // 鍵付きドア（開閉状態で描き分け） [TASK-13b]
   LOCKED_ROOMS.forEach(room => {
-    if (lockedRoomState[room.id]) return;
     const d = room.door;
-    ctx.fillStyle = '#5a3a00';
-    ctx.fillRect(d.x, d.y, d.w, d.h);
-    ctx.strokeStyle = '#EF9F27'; ctx.lineWidth = 2;
-    ctx.strokeRect(d.x, d.y, d.w, d.h);
-    ctx.fillStyle = '#EF9F27'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('KEY', d.x + d.w/2, d.y + d.h/2 + 4);
+    const cx = d.x + d.w / 2, cy = d.y + d.h / 2;
+    const isOpen = lockedRoomState[room.id];
+    const isHintRange = playerKeys > 0 && Math.hypot(cx - player.x, cy - player.y) < 120;
+
+    if (isOpen) {
+      // 開いている：薄い枠だけ
+      ctx.strokeStyle = 'rgba(239,159,39,0.25)'; ctx.lineWidth = 1;
+      ctx.strokeRect(d.x, d.y, d.w, d.h);
+    } else {
+      // 閉じている：茶色ブロック + KEY 表示
+      ctx.fillStyle = '#5a3a00';
+      ctx.fillRect(d.x, d.y, d.w, d.h);
+      ctx.strokeStyle = '#EF9F27'; ctx.lineWidth = 2;
+      ctx.strokeRect(d.x, d.y, d.w, d.h);
+      ctx.fillStyle = '#EF9F27'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('KEY', cx, cy + 4);
+    }
+
     // 近接ヒント
-    const cx = d.x + d.w/2, cy = d.y + d.h/2;
-    if (playerKeys > 0 && Math.hypot(cx - player.x, cy - player.y) < 120) {
-      ctx.fillStyle = 'rgba(239,159,39,0.18)';
-      ctx.beginPath(); ctx.arc(cx, cy, 50, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#EF9F27'; ctx.font = '9px sans-serif';
-      ctx.fillText('近づくと解錠', cx, cy + d.h/2 + 14);
+    if (isHintRange) {
+      ctx.fillStyle = 'rgba(239,159,39,0.14)';
+      ctx.beginPath(); ctx.arc(cx, cy, 50, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#EF9F27'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(isOpen ? 'タップで施錠' : 'タップで解錠', cx, cy + d.h / 2 + 14);
     }
   });
 
@@ -219,6 +229,14 @@ function draw() {
     ctx.fillText(f.text, f.x, f.y);
   });
   ctx.globalAlpha = 1;
+
+  // ドアボタン状態更新 [TASK-13b]
+  const doorBtn = document.getElementById('doorBtn');
+  if (doorBtn) {
+    const near = typeof isNearDoor === 'function' && isNearDoor();
+    doorBtn.classList.toggle('active', near);
+  }
+
   ctx.restore();
 
   // ─── ミニマップ ─────────────────────────────────────────────
@@ -258,5 +276,22 @@ function draw() {
     ctx.font = `${Math.round(VW*0.038)}px sans-serif`;
     ctx.fillText(`${waveClearBonus.kills}体撃破  +${waveClearBonus.score}点  +$${waveClearBonus.money}`, VW/2, VH/2+20); // [TASK-07]
     ctx.globalAlpha = 1;
+  }
+
+  // NPC ボタン状態更新 [TASK-14c]
+  const nearNPC = typeof isNearNPC === 'function' && isNearNPC();
+  ['npcWeaponBtn','npcFollowBtn','npcStandbyBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('active', nearNPC);
+  });
+  // followBtn / standbyBtn: コマンド中は強調
+  if (nearNPC) {
+    const target = npcs.find(n => !n.dead && Math.hypot(n.x - player.x, n.y - player.y) < 60);
+    if (target) {
+      const fb = document.getElementById('npcFollowBtn');
+      const sb = document.getElementById('npcStandbyBtn');
+      if (fb) fb.style.borderColor = target.command === 'follow'  ? '#85B7EB' : '';
+      if (sb) sb.style.borderColor = target.command === 'standby' ? '#EF9F27' : '';
+    }
   }
 }
